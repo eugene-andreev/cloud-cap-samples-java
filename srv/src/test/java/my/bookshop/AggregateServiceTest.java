@@ -14,7 +14,7 @@ import com.sap.cds.ql.cqn.CqnSelect;
 import com.sap.cds.reflect.CdsModel;
 
 import cds.gen.aggregationservice.AggregationService_;
-import my.bookshop.utils.AggregateTransformation;
+import my.bookshop.utils.AggregateTransformer;
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -30,15 +30,15 @@ public class AggregateServiceTest {
 	@Test
 	public void testTransformer() {
 		CqnSelect select = Select.from(AggregationService_.BOOKS).columns( //
-				c -> c.genreID(), // dimension
-				c -> c.price(), // dimension
-				c -> c.worstRating(), // MIN
-				c -> c.bestRating(), // MAX
+				c -> c.genreID(),		// dimension
+				c -> c.price(), 		// dimension
+				c -> c.worstRating(), 	// MIN
+				c -> c.bestRating(), 	// MAX
 				c -> c.totalNicePrice() // CASE WHEN price < 14 THEN 1 ELSE 0
-		).where(c -> c.genreID().gt(11));
+		).where(c -> c.genreID().gt(11)).orderBy(c -> c.genreID().desc(), c -> c.worstRating().asc());
 		System.out.println("ORIGINAL    QUERY: " + select);
 
-		select = AggregateTransformation.create(model).transform(select);
+		select = AggregateTransformer.create(model).transform(select);
 		System.out.println("TRANSFORMED QUERY: " + select);
 
 		Result result = dataStore.execute(select);

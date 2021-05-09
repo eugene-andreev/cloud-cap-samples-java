@@ -48,7 +48,7 @@ service AggregationService {
     @Aggregation.default: #AVERAGE   // AVG works for CDS watch but not for JAVA  
     rating as averageRating : Decimal,
 
-    // Aggregate with condition for total number of nice prices books < 13 bucks
+    // Aggregate with condition for total number of nice prices books < 14 bucks
   	@Aggregation.default: #SUM
     CASE WHEN price < 14 THEN 1 ELSE 0 END as totalNicePrice : Decimal,
 

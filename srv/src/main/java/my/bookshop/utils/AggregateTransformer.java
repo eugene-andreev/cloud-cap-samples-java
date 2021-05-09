@@ -6,14 +6,11 @@ package my.bookshop.utils;
 import static com.sap.cds.impl.builder.model.ElementRefImpl.element;
 import static com.sap.cds.util.CdsModelUtils.entity;
 import static java.util.Collections.singletonMap;
-import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
-import com.sap.cds.impl.parser.builder.SortSpecBuilder;
 import com.sap.cds.ql.CQL;
 import com.sap.cds.ql.ElementRef;
 import com.sap.cds.ql.Select;
@@ -21,7 +18,6 @@ import com.sap.cds.ql.Value;
 import com.sap.cds.ql.cqn.CqnSelect;
 import com.sap.cds.ql.cqn.CqnSelectListItem;
 import com.sap.cds.ql.cqn.CqnSelectListValue;
-import com.sap.cds.ql.cqn.CqnSortSpecification;
 import com.sap.cds.ql.cqn.CqnValidationException;
 import com.sap.cds.ql.impl.SelectListValueBuilder;
 import com.sap.cds.reflect.CdsAnnotatable;
@@ -30,7 +26,12 @@ import com.sap.cds.reflect.CdsElement;
 import com.sap.cds.reflect.CdsEntity;
 import com.sap.cds.reflect.CdsModel;
 
-public class AggregateTransformation {
+/**
+ * Utility class which transforms the select query to the aggregate query based
+ * on the {@code @Aggregation.default} annotations in CDS Model.
+ * 
+ */
+public class AggregateTransformer {
 
 	private static final String AGGREGATION_DEFAULT = "Aggregation.default";
 	private static final String SUPPORTED_RESTRICTIONS = "Aggregation.ApplySupported.PropertyRestrictions";
@@ -42,15 +43,15 @@ public class AggregateTransformation {
 	private final CdsModel model;
 	private CdsEntity targetEntity;
 
-	private final List<CqnSelectListItem> dimensions = new ArrayList<CqnSelectListItem>();
-	private final List<CqnSelectListItem> selectListItems = new ArrayList<CqnSelectListItem>();
+	private final List<CqnSelectListItem> dimensions = new ArrayList<>();
+	private final List<CqnSelectListItem> selectListItems = new ArrayList<>();
 
-	private AggregateTransformation(CdsModel model) {
+	private AggregateTransformer(CdsModel model) {
 		this.model = model;
 	}
 
-	public static AggregateTransformation create(CdsModel model) {
-		return new AggregateTransformation(model);
+	public static AggregateTransformer create(CdsModel model) {
+		return new AggregateTransformer(model);
 	}
 
 	/**
@@ -62,10 +63,16 @@ public class AggregateTransformation {
 	 */
 	public CqnSelect transform(CqnSelect select) {
 		targetEntity = entity(model, select.ref());
-		if (isAggregateEntity()) {
+		// Is entity annotated with '@Aggregation.ApplySupported.PropertyRestrictions'?
+		boolean isAggregateEntity = getAnnotatedValue(targetEntity, SUPPORTED_RESTRICTIONS, false);
+		if (isAggregateEntity) {
+			dimensions.clear();
+			selectListItems.clear();
+			// Iterate through SLIs of original select to collect measures and dimensions
 			select.items().forEach(this::processSelectListItem);
+			// Build new select query based on measures and dimensions
 			Select<?> copy = Select.from(select.ref()).columns(selectListItems).groupBy(dimensions)
-					.orderBy(getOrderBy(select));
+					.orderBy(select.orderBy());
 			select.where().ifPresent((w) -> copy.where(w));
 			return copy;
 		}
@@ -77,12 +84,14 @@ public class AggregateTransformation {
 		CqnSelectListValue sli = SelectListValueBuilder.select(itemName).build();
 		CdsElement element = targetEntity.getElement(itemName);
 
-		if (isMeasure(element)) {
+		// True if select list item is annotated with '@Aggregation.default: ...'
+		boolean isMeasure = null != getAnnotatedValue(element, AGGREGATION_DEFAULT, null);
+		if (isMeasure) {
 			// If SLI is measure -> transform it to corresponding aggregate function
 			selectListItems.add(asAggregateFunction(element).as(itemName));
 		} else {
 			selectListItems.add(sli);
-			// otherwise assume SLI is a dimension -> group by
+			// Otherwise assume SLI is a dimension -> group by
 			dimensions.add(sli);
 		}
 	}
@@ -90,7 +99,7 @@ public class AggregateTransformation {
 	private Value<?> asAggregateFunction(CdsElement element) {
 		Value<?> functionCall;
 		ElementRef<Object> elementRef = element(element.getName());
-		String aggregateFunctionName = getAggregation(element);
+		String aggregateFunctionName = getAnnotatedValue(element, AGGREGATION_DEFAULT, singletonMap("#", "#")).get("#");
 
 		if (ALLOWED_AGGREGATES.contains(aggregateFunctionName)) {
 			functionCall = CQL.func(aggregateFunctionName, elementRef);
@@ -104,32 +113,6 @@ public class AggregateTransformation {
 		return functionCall;
 	}
 
-	/**
-	 * Return true if entity is annotated with
-	 * {@code @Aggregation.ApplySupported.PropertyRestrictions: true}
-	 * 
-	 * @return
-	 */
-	private boolean isAggregateEntity() {
-		return getAnnotatedValue(targetEntity, SUPPORTED_RESTRICTIONS, false);
-	}
-
-	/**
-	 * Returns true if select list item is annotated with
-	 * {@code @Aggregation.default}
-	 * 
-	 * @param element
-	 * @return true or false
-	 */
-	private boolean isMeasure(CdsElement element) {
-		return null != getAnnotatedValue(element, AGGREGATION_DEFAULT, null);
-	}
-
-	private String getAggregation(CdsElement element) {
-		Map<String, String> annotatedValue = getAnnotatedValue(element, AGGREGATION_DEFAULT, singletonMap("#", "#"));
-		return annotatedValue.get("#");
-	}
-
 	private <T> T getAnnotatedValue(CdsAnnotatable annotatable, String annotation, T fallBackValue) {
 		try {
 			return annotatable.<T>findAnnotation(annotation).map(CdsAnnotation::getValue).orElse(fallBackValue);
@@ -137,16 +120,5 @@ public class AggregateTransformation {
 			throw new CqnValidationException("The type of annotation value for " + annotatable + " is not a "
 					+ fallBackValue.getClass().getName(), ex);
 		}
-	}
-
-	private List<CqnSortSpecification> getOrderBy(CqnSelect select) {
-		return select.orderBy().stream().map(o -> getItem(select, o)).collect(toList());
-	}
-
-	private CqnSortSpecification getItem(CqnSelect select, CqnSortSpecification orderByItem) {
-		return select.items().stream()
-				.filter(item -> item.asValue().displayName().equals(orderByItem.item().displayName()))
-				.map(item -> SortSpecBuilder.by(item.asValue()).order(orderByItem.order()).build()).findFirst()
-				.orElseGet(() -> orderByItem);
 	}
 }
