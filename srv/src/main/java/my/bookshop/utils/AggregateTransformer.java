@@ -5,12 +5,15 @@ package my.bookshop.utils;
 
 import static com.sap.cds.impl.builder.model.ElementRefImpl.element;
 import static com.sap.cds.util.CdsModelUtils.entity;
+import static com.sap.cds.util.CqnStatementUtils.resolveStar;
 import static java.util.Collections.singletonMap;
+import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.collect.Streams;
 import com.sap.cds.ql.CQL;
 import com.sap.cds.ql.ElementRef;
 import com.sap.cds.ql.Select;
@@ -68,15 +71,38 @@ public class AggregateTransformer {
 		if (isAggregateEntity) {
 			dimensions.clear();
 			selectListItems.clear();
+			List<CqnSelectListItem> items = select.items();
+
+			if (select.items().size() == 1 && select.items().get(0).isStar()) {
+				items = getStarItems(targetEntity, select);
+			} else {
+				items = select.items();
+			}
 			// Iterate through SLIs of original select to collect measures and dimensions
-			select.items().forEach(this::processSelectListItem);
+			items.forEach(this::processSelectListItem);
 			// Build new select query based on measures and dimensions
-			Select<?> copy = Select.from(select.ref()).columns(selectListItems).groupBy(dimensions)
-					.orderBy(select.orderBy());
+			Select<?> copy = Select.from(select.ref()).columns(selectListItems).orderBy(select.orderBy())
+					.groupBy(dimensions);
 			select.where().ifPresent((w) -> copy.where(w));
 			return copy;
 		}
 		return select;
+	}
+
+	private List<CqnSelectListItem> getStarItems(CdsEntity targetEntity, CqnSelect select) {
+		List<String> exclude = excludeItems(targetEntity, select);
+		return resolveStar(select.items(), exclude, targetEntity);
+	}
+
+	private List<String> excludeItems(CdsEntity targetEntity, CqnSelect select) {
+		// Collect all dimensions and remove those referenced in group and order by
+		List<String> dims = targetEntity.nonAssociationElements().filter(e -> !isMeasure(e)).map(e -> e.getName())
+				.collect(toList());
+		List<String> referencedItems = Streams.concat(select.groupBy().stream().map(e -> e.asValue().displayName()),
+				select.orderBy().stream().map(e -> e.item().displayName())).collect(toList());
+		dims.removeAll(referencedItems);
+
+		return dims;
 	}
 
 	private void processSelectListItem(CqnSelectListItem item) {
@@ -85,7 +111,7 @@ public class AggregateTransformer {
 		CdsElement element = targetEntity.getElement(itemName);
 
 		// True if select list item is annotated with '@Aggregation.default: ...'
-		boolean isMeasure = null != getAnnotatedValue(element, AGGREGATION_DEFAULT, null);
+		boolean isMeasure = isMeasure(element);
 		if (isMeasure) {
 			// If SLI is measure -> transform it to corresponding aggregate function
 			selectListItems.add(asAggregateFunction(element).as(itemName));
@@ -94,6 +120,10 @@ public class AggregateTransformer {
 			// Otherwise assume SLI is a dimension -> group by
 			dimensions.add(sli);
 		}
+	}
+
+	private boolean isMeasure(CdsElement element) {
+		return null != getAnnotatedValue(element, AGGREGATION_DEFAULT, null);
 	}
 
 	private Value<?> asAggregateFunction(CdsElement element) {
