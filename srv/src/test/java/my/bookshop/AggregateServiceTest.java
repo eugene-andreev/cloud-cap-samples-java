@@ -32,11 +32,10 @@ public class AggregateServiceTest {
 	public void testTransformer() {
 		CqnSelect select = Select.from(AggregationService_.BOOKS).columns( //
 				c -> c.genreID(), // dimension
-				c -> c.price(), // dimension
 				c -> c.worstRating(), // MIN
 				c -> c.bestRating(), // MAX
 				c -> c.totalNicePrice() // CASE WHEN price < 14 THEN 1 ELSE 0
-		).where(c -> c.genreID().gt(11)).orderBy(c -> c.genreID().desc(), c -> c.worstRating().asc());
+		).where(c -> c.genreID().gt(11)).orderBy(c -> c.genreID().desc());
 		System.out.println("ORIGINAL    QUERY: " + select);
 
 		select = AggregateTransformer.create(model).transform(select);

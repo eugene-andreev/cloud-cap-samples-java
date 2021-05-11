@@ -3,31 +3,29 @@
  **************************************************************************/
 package my.bookshop.utils;
 
-import static com.sap.cds.impl.builder.model.ElementRefImpl.element;
-import static com.sap.cds.util.CdsModelUtils.entity;
-import static com.sap.cds.util.CqnStatementUtils.resolveStar;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Stream;
 
 import com.google.common.collect.Streams;
 import com.sap.cds.ql.CQL;
 import com.sap.cds.ql.ElementRef;
-import com.sap.cds.ql.Select;
 import com.sap.cds.ql.Value;
+import com.sap.cds.ql.cqn.CqnModifier;
 import com.sap.cds.ql.cqn.CqnSelect;
 import com.sap.cds.ql.cqn.CqnSelectListItem;
-import com.sap.cds.ql.cqn.CqnSelectListValue;
 import com.sap.cds.ql.cqn.CqnValidationException;
-import com.sap.cds.ql.impl.SelectListValueBuilder;
 import com.sap.cds.reflect.CdsAnnotatable;
 import com.sap.cds.reflect.CdsAnnotation;
 import com.sap.cds.reflect.CdsElement;
 import com.sap.cds.reflect.CdsEntity;
 import com.sap.cds.reflect.CdsModel;
+import com.sap.cds.reflect.CdsStructuredType;
 
 /**
  * Utility class which transforms the select query to the aggregate query based
@@ -65,7 +63,7 @@ public class AggregateTransformer {
 	 * @return aggregate select or original statement
 	 */
 	public CqnSelect transform(CqnSelect select) {
-		targetEntity = entity(model, select.ref());
+		targetEntity = model.getEntity(select.ref().lastSegment());
 		// Is entity annotated with '@Aggregation.ApplySupported.PropertyRestrictions'?
 		boolean isAggregateEntity = getAnnotatedValue(targetEntity, SUPPORTED_RESTRICTIONS, false);
 		if (isAggregateEntity) {
@@ -81,9 +79,17 @@ public class AggregateTransformer {
 			// Iterate through SLIs of original select to collect measures and dimensions
 			items.forEach(this::processSelectListItem);
 			// Build new select query based on measures and dimensions
-			Select<?> copy = Select.from(select.ref()).columns(selectListItems).orderBy(select.orderBy())
-					.groupBy(dimensions);
-			select.where().ifPresent((w) -> copy.where(w));
+			CqnSelect copy = CQL.copy(select, new CqnModifier() {
+				@Override
+				public List<CqnSelectListItem> items(List<CqnSelectListItem> items) {
+					return selectListItems;
+				}
+
+				@Override
+				public List<CqnSelectListItem> groupBy(List<CqnSelectListItem> groupBy) {
+					return dimensions;
+				}
+			});
 			return copy;
 		}
 		return select;
@@ -92,6 +98,19 @@ public class AggregateTransformer {
 	private List<CqnSelectListItem> getStarItems(CdsEntity targetEntity, CqnSelect select) {
 		List<String> exclude = excludeItems(targetEntity, select);
 		return resolveStar(select.items(), exclude, targetEntity);
+	}
+
+	public static List<CqnSelectListItem> resolveStar(List<CqnSelectListItem> items, Collection<String> excluding,
+			CdsStructuredType rowType) {
+		Stream<CdsElement> elements = rowType.concreteNonAssociationElements();
+		List<CqnSelectListItem> resolved = elements.map(e -> e.getName()).filter(n -> !excluding.contains(n))
+				.map(n -> CQL.get(n).as(n)).collect(toList());
+
+		if (items != null) {
+			items.stream().filter(sli -> !sli.isStar()).forEach(resolved::add);
+		}
+
+		return resolved;
 	}
 
 	private List<String> excludeItems(CdsEntity targetEntity, CqnSelect select) {
@@ -107,7 +126,6 @@ public class AggregateTransformer {
 
 	private void processSelectListItem(CqnSelectListItem item) {
 		String itemName = item.asValue().displayName();
-		CqnSelectListValue sli = SelectListValueBuilder.select(itemName).build();
 		CdsElement element = targetEntity.getElement(itemName);
 
 		// True if select list item is annotated with '@Aggregation.default: ...'
@@ -116,9 +134,9 @@ public class AggregateTransformer {
 			// If SLI is measure -> transform it to corresponding aggregate function
 			selectListItems.add(asAggregateFunction(element).as(itemName));
 		} else {
-			selectListItems.add(sli);
+			selectListItems.add(item);
 			// Otherwise assume SLI is a dimension -> group by
-			dimensions.add(sli);
+			dimensions.add(item);
 		}
 	}
 
@@ -128,7 +146,7 @@ public class AggregateTransformer {
 
 	private Value<?> asAggregateFunction(CdsElement element) {
 		Value<?> functionCall;
-		ElementRef<Object> elementRef = element(element.getName());
+		ElementRef<Object> elementRef = CQL.get(element.getName());
 		String aggregateFunctionName = getAnnotatedValue(element, AGGREGATION_DEFAULT, singletonMap("#", "#")).get("#");
 
 		if (ALLOWED_AGGREGATES.contains(aggregateFunctionName)) {
