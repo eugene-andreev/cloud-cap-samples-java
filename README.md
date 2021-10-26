@@ -56,6 +56,7 @@ Domain Model related Features:
 - Use of [Aspects](https://cap.cloud.sap/docs/cds/cdl#aspects) in the Model Definition such as the [`managed` or `cuid` Aspect](https://cap.cloud.sap/docs/cds/common#common-reuse-aspects) in [Books](db/books.cds)
 - [Input validation](https://cap.cloud.sap/docs/cds/annotations#input-validation) using model annotation `@assert.format`
 - [Data Localization](https://cap.cloud.sap/docs/guides/localized-data) for [Books](db/books.cds)
+- Use of [Media Data](https://cap.cloud.sap/docs/guides/providing-services#media-data) in [Books](db/books.cds) and [AdminService](srv/admin-service.cds)
 
 Service Model related Features:
 
@@ -64,6 +65,8 @@ Service Model related Features:
 - Add annotations for [searchable elements](https://github.wdf.sap.corp/pages/cap/java/query-api#select) in the [Admin Service](srv/admin-service.cds)
 - [Localized Messages](https://cap.cloud.sap/docs/java/indicating-errors) in the [Admin Service Event Handler](srv/src/main/java/my/bookshop/handlers/AdminServiceHandler.java)
 - role-based restrictions in [AdminService](srv/admin-service.cds) and [ReviewService](srv/review-service.cds)
+- Use of [`@cds.persistence.skip`](https://cap.cloud.sap/docs/advanced/hana#cdspersistenceskip) in [AdminService](srv/admin-service.cds)
+- [Media Data](https://cap.cloud.sap/docs/guides/providing-services#media-data) processing in the [Admin Service Event Handler](srv/src/main/java/my/bookshop/handlers/AdminServiceHandler.java)
 
 User Interface related Features:
 
@@ -73,6 +76,8 @@ User Interface related Features:
 - UI Annotations for custom actions in the [Browse Books](app/browse/fiori-service.cds) and [Manage Books](app/admin/fiori-service.cds) UI, including annotations for a button and a popup
 - [Value Help](https://cap.cloud.sap/docs/cds/annotations#odata) for [Books](app/orders/fiori-service.cds) and [Authors](app/common.cds)
 - [Model Localization](https://cap.cloud.sap/docs/guides/i18n) for [English](app/_i18n/i18n.properties) and [German](app/_i18n/i18n_de.properties) language for static texts
+- [Custom File Upload extension](app/admin/webapp/extension/Upload.js) which provides a button for uploading `CSV` files
+- A simple Swagger UI for the CatalogService API at <http://localhost:8080/swagger/index.html>
 
 CDS Maven Plugin Features:
 
@@ -137,6 +142,7 @@ Optionally, use the following steps to import the project to Eclipse:
 
     <http://localhost:8080/>: This should show the automatically generated index page of served paths.
     <http://localhost:8080/fiori.html>: This is the actual bookshop application UI.
+    <http://localhost:8080/swagger/index.html>: This is providing a Swagger UI for the CatalogService API.
 
     You'll start with a predefined stock of books as this procedure starts the bookshop application with a CSV-initialized in-memory H2 database.
 
@@ -183,20 +189,20 @@ Deploy as Single Tenant Application:
 - Rename `mta-single-tenant.yaml` to `mta.yaml`
 - Run `mbt build`
 - Run `cf login`
-- Run `cf deploy mta_archives/bookshop-java-public_1.0.0.mtar`
+- Run `cf deploy mta_archives/bookshop_1.0.0.mtar`
 
 Deploy as Multitenant Application:
-- Create an SAP HANA Cloud Instance in your SAP Business Technology Platform space.
+- [Create a SAP HANA Cloud Instance](https://developers.sap.com/tutorials/hana-cloud-deploying.html) in your SAP Business Technology Platform space.
 - Rename `mta-multi-tenant.yaml` to `mta.yaml`
 - Run `mbt build`
 - Run `cf login`
-- Run `cf deploy mta_archives/bookshop-java-public_1.0.0.mtar`
+- Run `cf deploy mta_archives/bookshop-mt_1.0.0.mtar`
 - Go to another subaccount in your global account, under subscriptions and subscribe to the application you deployed.
-- Run `cf map-route bookshop-java-public-approuter <YOUR DOMAIN> --hostname <SUBSCRIBER TENANT>-<ORG>-<SPACE>-bookshop-java-public-approuter` or create and bind the route manually.
+- Run `cf map-route bookshop-mt-app <YOUR DOMAIN> --hostname <SUBSCRIBER TENANT>-<ORG>-<SPACE>-bookshop-mt-app` or create and bind the route manually.
 
 # Code Tour
 
-Take the [guided tour](.tours) in VS Code through our CAP Samples for Java and learn which CAP features are showcased by the different parts of the repository. Just install the [CodeTour extension](https://marketplace.visualstudio.com/items?itemName=vsls-contrib.codetour) for VS Code. 
+Take the [guided tour](.tours) in VS Code through our CAP Samples for Java and learn which CAP features are showcased by the different parts of the repository. Just install the [CodeTour extension](https://marketplace.visualstudio.com/items?itemName=vsls-contrib.codetour) for VS Code.
 
 # Get Support
 
