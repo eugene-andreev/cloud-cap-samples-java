@@ -108,11 +108,9 @@
 						</goals>
 						<configuration>
 							<commands>
-								<command>build --for java-cf</command>
-								<command>deploy --to sql --with-mocks --dry >
-									${project.basedir}/src/main/resources/schema.sql</command>
+								<command>build</command>
 								<command>deploy --to sql --dry >
-									${project.basedir}/src/main/resources/schema-nomocks.sql</command>
+									${project.basedir}/src/main/resources/schema.sql</command>
 							</commands>
 						</configuration>
 					</execution>

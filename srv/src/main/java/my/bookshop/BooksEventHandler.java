@@ -1,12 +1,9 @@
 package my.bookshop;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.sap.cds.ql.cqn.CqnInsert;
-import com.sap.cds.ql.cqn.CqnStatement;
 import com.sap.cds.services.cds.CdsCreateEventContext;
 import com.sap.cds.services.handler.EventHandler;
 import com.sap.cds.services.handler.annotations.On;
@@ -34,6 +31,7 @@ public class BooksEventHandler implements EventHandler {
         context.getChangeSetContext().register(dataCollector);
 
         CqnInsert insert = context.getCqn();
+
         logger.info("Processing statement: " + insert);
         List<Map<String, Object>> entries = insert.entries();
         dataCollector.add(entries);
