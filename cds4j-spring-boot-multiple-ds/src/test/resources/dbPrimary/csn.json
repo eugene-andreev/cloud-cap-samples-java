@@ -1,0 +1,21 @@
+{
+  "definitions": {
+    "Book": {
+      "kind": "entity",
+      "elements": {
+        "id": {
+          "key": true,
+          "type": "cds.Integer"
+        },
+        "title": {
+          "type": "cds.String"
+        }
+      }
+    }
+  },
+  "meta": {
+    "creator": "CDS Compiler v2.7.0",
+    "flavor": "inferred"
+  },
+  "$version": "2.0"
+}
